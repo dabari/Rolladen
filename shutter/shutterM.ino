@@ -16,8 +16,8 @@
   #include "AsyncUDP.h"
   #include <ArduinoOTA.h>
 
-  const char * ssid = "#####SSID goes here#####";
-  const char * password = "##### Password goes here #####";
+  const char * ssid = "********";
+  const char * password = "********";
   
   AsyncUDP udps;
   AsyncUDP udpc;
@@ -105,8 +105,8 @@
   //const byte L_IS = 4;
   //const byte R_EN = 7;
   //const byte L_EN = 5;
-  const byte R_PWM = 25;
-  const byte L_PWM = 26;
+  const byte R_PWM = 26;
+  const byte L_PWM = 25;
 
 // Hall Sensor module KY-003 (A3144 chip) w/ digital output
 // Note: Hall sensor module KY-035 (AH49E chip) was not used 
@@ -243,6 +243,7 @@ long lowVoltage= 0;
 
 long cal_wait_time =0;
 long emulate_Hall_time =0;
+bool EmulatedHallTrigger = false;
 
 
 unsigned char fader1step= 0;
@@ -993,20 +994,23 @@ void motor(byte state)
 #ifdef ESP32    
         case STOP:
           engineRunning = false;
-          ledcWrite(L_PWM, 0);
-          ledcWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
+          EmulatedHallTrigger = false;
           break;
       
         case UP: // UP
-          ledcWrite(R_PWM, 0);
-          ledcWrite(L_PWM, 255);
+          ledcWrite(R_PWMChannel, 0);
+          ledcWrite(L_PWMChannel, 255);
           engineRunning = true;
+          EmulatedHallTrigger = true;
           break;
          
        case DOWN:
-          ledcWrite(L_PWM, 0);
-          ledcWrite(R_PWM, 255);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 255);
           engineRunning = true;
+          EmulatedHallTrigger = true;
           break;
 
 
@@ -1044,25 +1048,25 @@ void toneLowToHigh()
 
 
      for (int i = 0; i <= 3; i++) {    
-          ledcWrite(L_PWM, 0);
-          ledcWrite(R_PWM, 10);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 10);
 
           delay(200);
 
-          ledcWrite(L_PWM, 0);
-          ledcWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(200);
      }
 
      for (int i = 0; i <= 4; i++) {    
-          ledcWrite(L_PWM, 10);
-          ledcWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 10);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(100);
 
-          ledcWrite(L_PWM, 0);
-          ledcWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(100);
           
@@ -1109,25 +1113,25 @@ void toneHighToLow()
 
  
      for (int i = 0; i <= 3; i++) {    
-          ledcWrite(L_PWM, 10);
-          ledcWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 10);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(200);
 
-          ledcWrite(L_PWM, 0);
-          ledcWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(200);
      }
 
      for (int i = 0; i <= 4; i++) {    
-          ledcWrite(L_PWM, 0);
-          ledcWrite(R_PWM, 10);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 10);
 
           delay(100);
 
-          ledcWrite(L_PWM, 0);
-          ledcWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(100);
      }   
@@ -1181,13 +1185,13 @@ void toneLowToLow()
      udpc.write(pled2, 20);
 
      for (int i = 0; i <= 6; i++) {    
-          ledcWrite(L_PWM, 0);
-          ledcWrite(R_PWM, 10);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 10);
 
           delay(50);
 
-          ledcWrite(L_PWM, 0);
-          ledcWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(50);
      }
@@ -1446,7 +1450,7 @@ void UDP_Fader_stepup(byte bfader) {
 
 void emulate_Hall_Sensor() {
 
-   if (millis()- emulate_Hall_time >= 333 & bCommand != STOP) {
+   if (millis()- emulate_Hall_time >= 333 & EmulatedHallTrigger) {
 
      emulate_Hall_time = millis();
      ISR_hallTMP();
@@ -1561,7 +1565,7 @@ void crone1(long wait, int repeat){  // set just started OSC app with Led and Fa
     if (now - oldCrone1time > repeat){
 
       udpc.write(pled1, 20);
-      if (bMenue == MOVE){
+      if (!engineRunning){
 
          UDP_Pos2Fader(leftFADER);
       }
