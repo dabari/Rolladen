@@ -14,6 +14,7 @@
   #include <WiFi.h>
   #include <WiFiUdp.h>
   #include "AsyncUDP.h"
+
   #include <ArduinoOTA.h>
 
   const char * ssid = "********";
@@ -25,9 +26,9 @@
 
   Preferences preferences;
 
-  unsigned char* udpdata; // declare a pointer to a char array
-  unsigned int udplength;
 
+  unsigned char* udpdata;
+  unsigned int udplength;
 
   unsigned char led1on[]  = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x31, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x3f, 0x80, 0x00, 0x00 };
   unsigned char led1off[] = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x31, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -44,26 +45,25 @@
   unsigned char led4on[]  = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x34, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x3f, 0x80, 0x00, 0x00 };
   unsigned char led4off[] = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x34, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
   unsigned char* pled4; 
-
+  
   enum {
   leftFADER, rightFADER
 };
-
- //fader1
+  //byte bfader;
+  //fader1
   unsigned char fader1[] = {0x2F, 0x31, 0x2F, 0x66, 0x61, 0x64, 0x65, 0x72, 0x31, 0x00, 0x00, 0x00, 0x2C, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // last four bytes are the float value of the fader position
   unsigned char* pfader1; 
   float fader1Pos;
-  float oldfader1Pos;
+  float oldfader1Pos = 0.0;
 
   //fader2
   unsigned char  fader2[] = {0x2F, 0x31, 0x2F, 0x66, 0x61, 0x64, 0x65, 0x72, 0x32, 0x00, 0x00, 0x00, 0x2C, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // last four bytes are the float value of the fader position
   unsigned char* pfader2;
   float fader2Pos;
-  float oldfader2Pos;
-
+  float oldfader2Pos = 0.0;
+  
   byte * tmp;
-
-  byte result = 0;
+  byte result = 0; 
   
   
   String txt= "";
@@ -162,7 +162,6 @@ const int resolution = 8; //bit
 
 //uint8_t* OSC_Rx;
 int  OSC_len;
-String OSCcmd = "";
 
 #endif
 
@@ -171,7 +170,6 @@ String OSCcmd = "";
 const byte PositionAllUp = 0;  // all up
 int  PositionAllDown  = 0;                // this detined the allDown position. It is set during calibration
 float currentPosition = 0;              // this will be tracked during up/down movement. The range is min. PositionAllUp and max. PossitionAllDown.
-float oldPosition = 0;
 unsigned int writes = 0; // byte writes = 0;
 int POSdir = +1;
 bool engineRunning = false;
@@ -245,16 +243,13 @@ long cal_wait_time =0;
 long emulate_Hall_time =0;
 bool EmulatedHallTrigger = false;
 
-
 unsigned char fader1step= 0;
 unsigned char fader2step= 0;
 float fadersteps[]={.2, .5, .8};
 
-
 long oldCrone1time = 0;
 long oldCrone2time = 0;
 bool ISR_hallFlag = false;
-
 
 // various pre-sets
   
@@ -315,85 +310,89 @@ void setup() { //§1
 
 #endif
 
-  Serial.begin(115200);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  if (WiFi.waitForConnectResult() != WL_CONNECTED) {
-      Serial.println("WiFi Failed");
-      while(1) {
-          delay(1000);
-      }
-  }
-
-
-  ArduinoOTA.setHostname("shutter_master");
+    Serial.begin(115200);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, password);
+    if (WiFi.waitForConnectResult() != WL_CONNECTED) {
+        Serial.println("WiFi Failed");
+        while(1) {
+            delay(1000);
+        }
+    }
+  ArduinoOTA.setHostname("shutter_slave");
   ArduinoOTA.setPassword("1234");
   ArduinoOTA.begin();
 
 
-    if(udps.listen(1235)) {
-       // Serial.print("UDP Listening on IP: ");
-       // Serial.println(WiFi.localIP());
+    if(udps.listen(1236)) {
+        Serial.print("UDP Listening on IP: ");
+        Serial.println(WiFi.localIP());
         udps.onPacket([](AsyncUDPPacket packets) {
-       //     Serial.print("UDP Packet Type: ");
-       //     Serial.print(packets.isBroadcast()?"Broadcast":packets.isMulticast()?"Multicast":"Unicast");
-       //     Serial.print(", From: ");
-       //     Serial.print(packets.remoteIP());
-       //     Serial.print(":");
-       //     Serial.print(packets.remotePort());
-       //     Serial.print(", To: ");
-       //     Serial.print(packets.localIP());
-       //     Serial.print(":");
-       //     Serial.print(packets.localPort());
-       //     Serial.print(", Length: ");
-       //     Serial.print(packets.length());
-            //Serial.print(", Datax: ");
+            Serial.print("UDP Packet Type: ");
+            Serial.print(packets.isBroadcast()?"Broadcast":packets.isMulticast()?"Multicast":"Unicast");
+            Serial.print(", From: ");
+            Serial.print(packets.remoteIP());
+            Serial.print(":");
+            Serial.print(packets.remotePort());
+            Serial.print(", To: ");
+            Serial.print(packets.localIP());
+            Serial.print(":");
+            Serial.print(packets.localPort());
+            Serial.print(", Length: ");
+            Serial.print(packets.length());
+            Serial.print(", Datax: ");
 
             udpdata = packets.data();
-            udplength = packets.length();            
+            udplength = packets.length();
+            
      
     
-              
-             // UP1
-            if (packets.data()[7] == 49){ //push1
+                      
+             // UP2
+            if (packets.data()[3] == 112 & packets.data()[7]== 51){ //push3
 
               if(packets.data()[16] == 63){ // pushed
-             //   Serial.println("UP1 - pushed");
+                Serial.println("UP1 - pushed");
                 digitalWrite(emulatedPushButton1, HIGH);
               }
 
               if(packets.data()[16] == 0){ // released
-              //  Serial.println("UP1 - released");
+                Serial.println("UP1 - released");
                 digitalWrite(emulatedPushButton1, LOW);
               }
             }
            // DOWN1
-           if (packets.data()[7] == 50){ //push2
+           if (packets.data()[3] == 112 & packets.data()[7] == 52){ //push4
 
             if(packets.data()[16] == 63){ // pushed
-              //Serial.println("DOWN1 - pushed");
+              Serial.println("DOWN1 - pushed");
               digitalWrite(emulatedPushButton2, HIGH);
             }
 
             if(packets.data()[16] == 0){ // released
-             // Serial.println("DOWN1 - released");
+              Serial.println("DOWN1 - released");
               digitalWrite(emulatedPushButton2, LOW);
             }
           }          
-     
 
-       
-            udpc.write(udpdata, udplength); // also send OSC data to #2
+           // fader1 (transit data)
+          // if (packets.data()[3] == 102 & packets.data()[8] == 49){ //fader1 transit data
+
+              udpc.write(udpdata, udplength);  //simply take OSC data for fader1 and pass it on to the mobile app
+
+             
+           //}          
+                 
             
         });
 
         
     }
 
-    if(udpc.connect(IPAddress(192,168,2, 77), 1236)) {
-       // Serial.println("UDP connected");
+    if(udpc.connect(IPAddress(192,168,178,40), 1234)) {
+        Serial.println("UDP connected");
         udpc.onPacket([](AsyncUDPPacket packet) {
-        /*    Serial.print("UDP Packet Type: ");
+            Serial.print("UDP Packet Type: ");
             Serial.print(packet.isBroadcast()?"Broadcast":packet.isMulticast()?"Multicast":"Unicast");
             Serial.print(", From: ");
             Serial.print(packet.remoteIP());
@@ -408,13 +407,12 @@ void setup() { //§1
             Serial.print(", Datay: ");
             Serial.write(packet.data(), packet.length());
             Serial.println();
-            */
             //reply to the client
             packet.printf("Got %u bytes of data", packet.length());
         });
         //Send unicast
         //udpc.print("Hello Server!");
-        
+         //udpc.print(*OSC_Rx);
     }
     
 
@@ -502,6 +500,7 @@ void setup() { //§1
       calState = upper;
       
       toneLowToHigh();
+
       cal_wait_time = millis();
 
   }
@@ -546,6 +545,8 @@ void setup() { //§1
 
   PositionAllDown = preferences.getUInt("PositionAllDown", 0);
   currentPosition = preferences.getFloat("currentPosition", 0);
+
+  UDP_Pos2Fader(rightFADER);
 
 #else  
   fail = 0;
@@ -594,9 +595,10 @@ void setup() { //§1
 void loop()
 {
 
-
   ArduinoOTA.handle();
-
+  //udpc.print(*OSC_Rx);
+  
+  //udpc.print("Hello Server!");
   emulate_Hall_Sensor();
   
   
@@ -670,7 +672,9 @@ void loop()
         case UP:
           if (currentPosition > PositionAllUp) { // if not all up
 
-            //Serial.println(currentPosition);
+            Serial.println(currentPosition);
+
+           
 
             if (!engineRunning) motor(UP);  // start motor to move up if its not already running                            
             requestSTOP = false;            // don't stop it during next ISR call
@@ -681,8 +685,8 @@ void loop()
             #endif              // ######################
 
 
-
-         
+        
+          
            }
            else {                    // shutter is all up, stop motor
             
@@ -694,7 +698,7 @@ void loop()
             #endif               // ######################
 
 
-
+ 
             
           }
           
@@ -711,8 +715,8 @@ void loop()
             #ifdef OLED_Display  // ######################
             MoveModeOLEDwrite("MOVE -down", currentPosition, PositionAllDown);  
             #endif               // ######################
-          
  
+           
             
           }
           else {
@@ -722,8 +726,9 @@ void loop()
            #ifdef OLED_Display    // ###################### 
            MoveModeOLEDwrite("MOVE -stop", currentPosition, PositionAllDown);
            #endif                 // ######################    
-
     
+
+ 
 
           }
 
@@ -737,9 +742,6 @@ void loop()
           #endif                 // ######################
 
 
-#ifdef ESP32            
-            //UDP_Pos2Fader(leftFADER);
-#endif           
           
           break;
       }
@@ -786,9 +788,12 @@ void loop()
 
           if (!engineRunning) {
              motor(DOWN);
+
+
           }         
           
-      
+  
+             
         
 
           #ifdef OLED_Display   // ######################
@@ -801,6 +806,7 @@ void loop()
           #endif                 // ######################
           
           
+
           cal_wait_time = millis();  
           break;
 
@@ -823,7 +829,12 @@ void loop()
                 if (millis()- cal_wait_time >= cal_wait_duration) {
                   calState = lower;
                   toneHighToLow();
-               
+                  pled4 = led4on;
+                  udpc.write(pled4, 20);
+                  
+
+
+                  
                   cal_wait_time = millis(); 
     
                 #ifdef OLED_Display    // ######################
@@ -841,6 +852,8 @@ void loop()
             if (millis()- cal_wait_time >= cal_wait_duration) {
               
 #ifdef ESP32
+  
+              
               preferences.putUInt("PositionAllDown", PositionAllDown);
               preferences.putUInt("HWflag1", 13);
               preferences.putUInt("HWflag2", 211);
@@ -849,9 +862,11 @@ void loop()
               writes = preferences.getUInt("FlashWrites", 0);
               writes++;
               preferences.putUInt("FlashWrites", writes);
+               
+              UDP_Pos2Fader(rightFADER);
 
-
-
+  
+              
 #else   
               EEPROM.update(15,PositionAllDown);
               EEPROM.update(16, 13);
@@ -866,7 +881,7 @@ void loop()
            
               bMenue = MOVE;
               toneLowToLow();
-              UDP_Pos2Fader(leftFADER);
+              UDP_Pos2Fader(rightFADER);
               
             }
           }
@@ -877,10 +892,7 @@ void loop()
 
       break;
   }
-
-  
   crone1(5000, 1000);
-
 } // loop
 
 
@@ -900,6 +912,7 @@ void checkCalRequested()
       bState[0] = UNHOLD;
       bState[1] = UNHOLD;
       toneLowToHigh();
+
       cal_wait_time = millis();
     
     }
@@ -1013,7 +1026,6 @@ void motor(byte state)
           EmulatedHallTrigger = true;
           break;
 
-
 #else
         case STOP:
           engineRunning = false;
@@ -1043,8 +1055,10 @@ void toneLowToHigh()
   
      digitalWrite(LED1, HIGH);
 
-#ifdef ESP32
 
+  
+
+#ifdef ESP32
 
 
      for (int i = 0; i <= 3; i++) {    
@@ -1070,9 +1084,11 @@ void toneLowToHigh()
 
           delay(100);
           
+          
      }  
-     pled1 = led1on;
-     udpc.write(pled1, 20); 
+     
+     pled3 = led3on;
+     udpc.write(pled3, 20);
 
 #else
      for (int i = 0; i <= 3; i++) {    
@@ -1112,6 +1128,7 @@ void toneHighToLow()
 #ifdef ESP32
 
  
+     
      for (int i = 0; i <= 3; i++) {    
           ledcWrite(L_PWMChannel, 10);
           ledcWrite(R_PWMChannel, 0);
@@ -1135,11 +1152,11 @@ void toneHighToLow()
 
           delay(100);
      }   
-     pled1 = led1off;
-     udpc.write(pled1, 20);
+     pled3 = led3off;
+     udpc.write(pled3, 20);
 
-     pled2 = led2on;
-     udpc.write(pled2, 20);
+     pled4 = led4on;
+     udpc.write(pled4, 20);
 
 #else
      for (int i = 0; i <= 3; i++) {    
@@ -1177,12 +1194,11 @@ void toneLowToLow()
 
 #ifdef ESP32
 
+     pled3 = led3on;
+     udpc.write(pled3, 20);
 
-     pled1 = led1on;
-     udpc.write(pled1, 20);
-
-     pled2 = led2on;
-     udpc.write(pled2, 20);
+     pled4 = led4on;
+     udpc.write(pled4, 20);
 
      for (int i = 0; i <= 6; i++) {    
           ledcWrite(L_PWMChannel, 0);
@@ -1195,11 +1211,11 @@ void toneLowToLow()
 
           delay(50);
      }
-     pled1 = led1off;
-     udpc.write(pled1, 20);
+     pled3 = led3off;
+     udpc.write(pled3, 20);
 
-     pled2 = led2off;
-     udpc.write(pled2, 20); 
+     pled4 = led4off;
+     udpc.write(pled4, 20);
 #else
      for (int i = 0; i <= 6; i++) {    
           analogWrite(L_PWM, 0);
@@ -1298,45 +1314,44 @@ void debounce()
 }
 
 
-
 #ifdef ESP32
 void UDP_Pos2Fader(byte bfader) {
 
    switch(bfader){
 
       case leftFADER:
-      
             fader1Pos = currentPosition/PositionAllDown;
-            tmp = (byte*)&fader1Pos;
-            fader1[16] = *(tmp+3);
-            fader1[17] = *(tmp+2);
-            fader1[18] = *(tmp+1);
-            fader1[19] = *tmp;
-
-            pfader1 = fader1;
-
-            udpc.write(pfader1, 20);  
-
+            if (fader1Pos != oldfader1Pos) { 
+              tmp = (byte*)&fader1Pos;
+              fader1[16] = *(tmp+3);
+              fader1[17] = *(tmp+2);
+              fader1[18] = *(tmp+1);
+              fader1[19] = *tmp;
+  
+              pfader1 = fader1;
+  
+              udpc.write(pfader1, 20);
+              oldfader1Pos = fader1Pos;  
+            }
             break;
 
       case rightFADER:
-
             fader2Pos = currentPosition/PositionAllDown;
-            tmp = (byte*)&fader2Pos;
-            fader2[16] = *(tmp+3);
-            fader2[17] = *(tmp+2);
-            fader2[18] = *(tmp+1);
-            fader2[19] = *tmp;
-
-            pfader2 = fader2;
-
-            udpc.write(pfader2, 20); 
-
+            //if (fader2Pos != oldfader2Pos) { 
+              tmp = (byte*)&fader2Pos;
+              fader2[16] = *(tmp+3);
+              fader2[17] = *(tmp+2);
+              fader2[18] = *(tmp+1);
+              fader2[19] = *tmp;
+  
+              pfader2 = fader2;
+  
+              udpc.write(pfader2, 20); 
+           //  oldfader2Pos = fader2Pos;
+           // }
             break;            
    }
 }
-
-
 
 void UDP_Fader_stepdown(byte bfader) {
 
@@ -1444,9 +1459,7 @@ void UDP_Fader_stepup(byte bfader) {
    }
    
 }
-
 #endif
-
 
 void emulate_Hall_Sensor() {
 
@@ -1463,14 +1476,10 @@ void emulate_Hall_Sensor() {
 void ISR_hallTMP() {
   
   ISR_hallFlag = true;
-  
   currentPosition = currentPosition + POSdir;
-
- 
-
  
   if (bMenue == MOVE) {
-    UDP_Pos2Fader(leftFADER);
+    UDP_Pos2Fader(rightFADER);
     if (currentPosition <= PositionAllUp || currentPosition >= PositionAllDown || requestSTOP) {
         
           bCommand = STOP;       
@@ -1482,10 +1491,10 @@ void ISR_hallTMP() {
   else if (bMenue == CAL) {
   if (POSdir >0 ){
 
-     UDP_Fader_stepdown(leftFADER);
+     UDP_Fader_stepdown(rightFADER);
   }else{
 
-     UDP_Fader_stepup(leftFADER);
+     UDP_Fader_stepup(rightFADER);
   }
  
 
@@ -1530,6 +1539,8 @@ void ISR_hall() {
 
 #else
 
+
+
 void ISR_hall() {
   
   currentPosition = currentPosition + POSdir;
@@ -1557,6 +1568,7 @@ void ISR_hall() {
 }
 #endif
 
+
 void crone1(long wait, int repeat){  // set just started OSC app with Led and Fader status
 
   
@@ -1564,7 +1576,7 @@ void crone1(long wait, int repeat){  // set just started OSC app with Led and Fa
   if (now > wait){
     if (now - oldCrone1time > repeat){
 
-      udpc.write(pled1, 20);
+      udpc.write(pled3, 20);
       if (!engineRunning){
 
          UDP_Pos2Fader(leftFADER);
@@ -1605,4 +1617,3 @@ void crone2(long wait, int repeat){  // set just started OSC app with Led and Fa
 }
 
 
- 
