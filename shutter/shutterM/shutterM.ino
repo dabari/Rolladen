@@ -169,7 +169,7 @@ String OSCcmd = "";
 
 
 const byte PositionAllUp = 0;  // all up
-int  PositionAllDown  = 0;                // this detined the allDown position. It is set during calibration
+unsigned int  PositionAllDown  = 0;                // this detined the allDown position. It is set during calibration
 float currentPosition = 0;              // this will be tracked during up/down movement. The range is min. PositionAllUp and max. PossitionAllDown.
 float oldPosition = 0;
 unsigned int writes = 0; // byte writes = 0;
@@ -255,6 +255,10 @@ long oldCrone1time = 0;
 long oldCrone2time = 0;
 bool ISR_hallFlag = false;
 
+bool ISR_GPIO= true; 
+
+String helper;
+
 
 // various pre-sets
   
@@ -268,6 +272,8 @@ int cal_wait_duration = 3000; // ms  the is the wait time during cal(-ibration m
  */
 
 String check = "";
+
+
 
 /*
  * *********************************************************
@@ -390,7 +396,7 @@ void setup() { //§1
         
     }
 
-    if(udpc.connect(IPAddress(192,168,2, 77), 1236)) {
+    if(udpc.connect(IPAddress(192,168, 178, 53), 1236)) {
        // Serial.println("UDP connected");
         udpc.onPacket([](AsyncUDPPacket packet) {
         /*    Serial.print("UDP Packet Type: ");
@@ -455,7 +461,7 @@ void setup() { //§1
   ver2 =  (ver.substring((ver.lastIndexOf(".")), (ver.lastIndexOf("\\")) + 1));
   ver3 = (ver2.substring( (ver2.lastIndexOf("_")+1), (ver2.length()) ));
 
-  #ifdef OLED_Display  // ######################
+#ifdef OLED_Display  // ######################
   //OLED start
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) { //§1/1
@@ -480,7 +486,7 @@ void setup() { //§1
  #endif             // ######################
  
 
-#ifdef ESP32
+
 
    if((preferences.getUInt("HWflag1", 0) != 13) || (preferences.getUInt("HWflag2", 0) != 211)) {  //  §1/2 HWflag1 (16) and HWflag2 (17)
 
@@ -489,8 +495,15 @@ void setup() { //§1
   }
   
   unsigned int fail;
+  delay(10000);
   fail = preferences.getUInt("fail",0);
+  Serial.print("fail* : ");
+  Serial.println(fail);
+ 
+ 
   if (fail != 222) {
+      Serial.println("WTF");
+      delay(10000);
       preferences.putUInt("PositionAllDown", 0); // PositionAllDown init 
   float pointer = 0;    
       preferences.putFloat("currentPosition", pointer); //currentPosition init 
@@ -506,55 +519,14 @@ void setup() { //§1
 
   }
 
-#else
-  
-  // check if there was a power failure at EEPROM Address 38, if yes, retrieve PositionAllDown and currentPosition values
-  // if no power failure was detected, assume a HW Reset or a new Upload, in which case there are no valid historic values - a new calibration needs to be forced.
 
-  if((EEPROM.read(16) != 13) || (EEPROM.read(17) != 211)) {  //HWflag1 (16) and HWflag2 (17)
-
-    EEPROM.write(28,1); // initialize write counter
- 
-  }
-  // this will force a new calibration as current possition would be wrong for new uploads or after HW reset
-  int fail;
-  fail = EEPROM.read(38);
-  if (fail != 222) {
-      EEPROM.update(15, 0); // PositionAllDown init (using 'update' to only write if content is different)
-  float pointer = 0;    
-      EEPROM.put(18,pointer); //currentPosition init (using 'put' as 'write' can only store one byte)
-
-
-
-      cal_wait_duration = -1;
-      bMenue = CAL;
-               
-      bCommand = STOP;
-      calState = upper;
-      
-      toneLowToHigh();
-      cal_wait_time = millis();
-     
-  }
-#endif
-
-
-#ifdef ESP32
-
-  preferences.putUInt("fail", 0); // Reset the fail flag of 222
+  //preferences.putUInt("fail", 0); // Reset the fail flag of 222
   
 
   PositionAllDown = preferences.getUInt("PositionAllDown", 0);
   currentPosition = preferences.getFloat("currentPosition", 0);
 
-#else  
-  fail = 0;
-  EEPROM.update(38, fail); // !!!!  Reset the fail flag of 222
 
-  PositionAllDown = EEPROM.read(15);
-  EEPROM.get(18, currentPosition); // using 'get' as 'read' only returns a single byte
-
-#endif
 
   for (int i = 0; i < NUM_BUTTONS; i++)
   {
@@ -575,7 +547,7 @@ void setup() { //§1
 
 #ifdef ESP32
 
-  attachInterrupt(interruptPin, ISR_hall, FALLING);
+  //attachInterrupt(interruptPin, ISR_hallTMP, FALLING);
 
 #else
   attachInterrupt(digitalPinToInterrupt(interruptPin), ISR_hall, FALLING);
@@ -597,7 +569,19 @@ void loop()
 
   ArduinoOTA.handle();
 
-  emulate_Hall_Sensor();
+  Serial.println(preferences.getUInt("fail", 0));
+
+ 
+  if (!ISR_GPIO & digitalRead(interruptPin) == 0) {
+
+    ISR_hallTMP();
+    ISR_GPIO= true;
+  }
+  else if (digitalRead(interruptPin) == 1) {
+    ISR_GPIO = false; 
+  };
+
+ // emulate_Hall_Sensor();
   
   
 #ifdef ESP32
@@ -612,10 +596,13 @@ void loop()
   delay(10); // this 10ms delay was requied is no OLED Display (also a delay) is used. It looked like polling the ADC too oftern in the loop caused wrong voltage readings which in turn shut the system down.
   Sample = analogRead(ADC_pin);
   
-  Voltage = map(Sample, 0, 1023, 0, 250);
-  Voltage = Voltage/10;
+  Voltage = map(Sample, 1150, 3850, 50, 150);
+  Voltage = (Voltage/10)+.5;
+  Voltage = 3;
+  //Serial.println(Sample);
+ // Serial.println(Voltage);
 
-  if (Voltage < 11.00) { //11.00V
+  if (Voltage < 11.50) { //11.00V
   
    lowVoltage = lowVoltage + 1;
   }
@@ -623,14 +610,18 @@ void loop()
     lowVoltage = 0;
   }
 
-  if (lowVoltage > 11) { //11
+  if (lowVoltage > 3) { //11
+
 
 #ifdef ESP32    
+    Serial.println("*");
+    helper = "passed";
     preferences.putFloat("currentPosition", currentPosition);
-    writes = preferences.getUInt("FlashWrites", 0);
-    writes++;
-    preferences.putUInt("FlashWrites", writes);
+   // writes = preferences.getUInt("FlashWrites", 0);
+   // writes++;
+   // preferences.putUInt("FlashWrites", writes);
     preferences.putUInt("fail", 222);
+    Serial.println("-");
 #else 
     EEPROM.put(18,currentPosition);
     writes = EEPROM.read(28);
@@ -646,7 +637,7 @@ void loop()
         
     motor(STOP); // Try to cut power to the motor to win few ms time for the EEPROM write to finish.  
     
-    for (;;); // Don't proceed, loop forever
+    //for (;;); // Don't proceed, loop forever
         
   }
 
@@ -1458,10 +1449,10 @@ void emulate_Hall_Sensor() {
   
 }
 
-
-
 void ISR_hallTMP() {
-  
+
+ 
+ 
   ISR_hallFlag = true;
   
   currentPosition = currentPosition + POSdir;
@@ -1499,6 +1490,8 @@ void ISR_hallTMP() {
   }
 
 }
+
+
 
 #ifdef ESP32
 

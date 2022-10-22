@@ -389,7 +389,7 @@ void setup() { //§1
         
     }
 
-    if(udpc.connect(IPAddress(192,168,2,21), 1234)) {
+    if(udpc.connect(IPAddress(192,168,178,40), 1234)) {
         Serial.println("UDP connected");
         udpc.onPacket([](AsyncUDPPacket packet) {
             Serial.print("UDP Packet Type: ");
