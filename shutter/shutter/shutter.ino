@@ -1,120 +1,415 @@
 
 
 /************************************
- * Ver 1.4 with initial EEProm storage
- * -POSmin
- * -POSmax
- * -POSactual
+ * Shutter Control Master 
  * 
- */
+ * 
+   Required Components:
+   - ESP32 Dev Module (U1)
+  
+              |----- antenna -----|
+         3.3V o                   o GND
+              |                   |
+              o                   o
+              |                   |
+       ADC_in o (36)              o
+              |                   |
+              o                   o
+              |                   |
+       IRQ_in o (34)              o
+              |                   |
+              o                   o
+              |                   |
+              o (32)              o
+              |                   |
+              o (33)              o
+              |                   |
+        R_PWM o (25)              o
+              |                   |
+        L_PWM o (26)              o
+              |                   |
+              o (27)              o
+              |                   |
+              o (14)              o
+              |                   |
+              o                   o
+              |                   |
+          GND o                   o
+              |                   |
+              o                   o
+              |                   |
+              o                   o
+              |                   |
+              o                   o
+              |                   |
+              o                   o
+              |                   |
+           5V o                   o
+              |_ _ _ _ USB _ _ _ _|
 
 
+  - IBT-2 BTS7960B PWM H-Bridge motor driver (U2)
 
-/*
+              |-------------------|
+              |                   |
+              |                   |
+              |                   |
+              |                   |
+              |                   |
+              |                   () B-
+          GND o--o VCC              |
+              |  |                () B+
+         L_IS o  o R_IS           | 
+              |  |                () M+
+         L_EN o  o R_EN           |
+              |  |                () M-
+         LPWM o__o RPWM           |
+              |                   |
+              |                   |
+              |_ _ _ _ _ _ _ _ _ _| 
 
-   Tastenauswertungsalgorithmus
+  - 2 lines OLED Display 0.91" I2C (optional) (U3)    
 
-   Tastenzustände können folgendermaßen abgefragt werden:
+              |----------------------------|
+          SDA o                            |
+          SCK o                            |
+          VCC o                            |
+          GND o                            |
+              |_ _ _ _ _ _ _ _ _ _ _ _ _ _ |     
 
-   Beispiele:
+  - digital Hall Sensor KY-003 (S1)
 
-   if (bState[7] == HOLD)                                         // Wird die Taste 7 momentan gedrückt gehalten?
-   if (bCmd[3] == PUSH)                                           // Wurde die Taste 3 gedrückt?
-   if (bCmd[1] == S_HOLD)                                         // Wurde die Taste 1 pushDur ms lang gedrückt gehalten?
-   if (bCmd[2] == M_HOLD && bCmd[4] == M_HOLD)                    // Wurden die Tasten 2 und 4 pushDur ms lang gedrückt gehalten, unabhängig davon, ob weiteren Tasten gedrückt gehalten werden?
-   if (bCmd[5] == M_HOLD && bCmd[6] == M_HOLD && bCount == 2)     // Wurden die Tasten 5 und 6 pushDur ms lang gedrückt gehalten, während keine weiteren Tasten gedrückt gehalten werden?
-                                                                  // bCount sollte der Summe der abzufragenden Tasten entsprechen.
+              |----------------|
+          GND o                |
+          +5V o                | (check if really 5V or 3.3V)
+            S o                |
+              |_ _ _ _ _ _ _ _ |     
 
-   Werden mehr als 255 Tasten benötigt, muss der Wertebereich von butPin und bCount jeweils in Integer geändert werden.
+  - 230V AC/ 12V DC 5A switching Power Supply (P1)
 
+              |-------|
+           AC o \     o +12V
+         230V |  \    | 
+           AC o   \   o GND
+              |_ _ \_ |   
+
+  - 12V DC/ 5V DC switching Power Supply (P2)
+
+              |-------|
+         +12V o \     o +5V 
+              |  \    | 
+          GND o   \   o GND
+              |_ _ \_ |   
+
+  - Voltage Divider (S2) 
+
+              |----------------|
+            - o                () Uin
+          n/c o                | 
+            S o                () GND
+              |_ _ _ _ _ _ _ _ |          
+
+
+ - DC gear motor (M1) 
+
+              |----------------|
+          M+ ()                |
+              |                | 
+          M- ()                |
+              |_ _ _ _ _ _ _ _ |          
+
+
+  - Diode 1N4004 (D1)
+
+          in o-------|>|-------o out
+
+  - Capacitor 4700uF (C1)
+
+           + o-------||--------o -  
+
+
+Wiring 
+
+ - ESP32 (U1) with Hall Sensor (S1)
+
+ (U1) 5V ----------- (S1) +
+ (U1) 34 ----------- (S1) S
+ (U1) GND ---------- (S1) GND
+
+ - ESB32 (U1) Gpio bridging
+
+ (U1) 32 ----------- (U1) 27
+ (U1) 33 ----------- (U1) 14
+
+ - ESP32 (U1) with Voltage Devider (S2) and 12V Power Supply (P1)
+
+ (U1) 36 ----------- (S2) S
+ (U1) GND ---------- (S2) -
+                     (S2) Uin -------- (P1) 12V
+                     (S2) GND -------- (P1) GND
+
+ - ESP32 (U1) and OLED display (U3)
+
+ (U1) 21 ----------- (U3) SDA
+ (U1) 22 ----------- (U3) SCK
+ (U1) 3.3V --------- (U3) VCC
+ (U1) GND ---------- (U3) GND
+
+ - ESP32 (U1) and motor driver (U2)
+
+ (U1) 25 ----------- (U2) LPWM
+ (U1) 26 ----------- (U2) RPWM
+ (U1) 3.3V --------- (U2) R_EN & L_EN
+ (U1) GND  --------- (U2) R_IS & L_IS & GND
+                     (U2) VCC not connected
+
+ - 12V Power supply (P1) and Voltage devider (S2)
+
+ (P1) +12V --------- (S2) Uin
+ (P1) GND ---------- (S2) GND
+
+  - 12V Power supply (P1) and motor driver (U2) 
+
+  (P1) +12V -------- (U2) B+
+  (P1) GND --------- (U2) B-
+
+  - 12V Power Supply, Diode (D1), capacitor (C1), 5V Pwr supply
+
+  (P1) +12V -------- (D1) in 
+                     (D1) out ------------- (P2) 12V
+                     (D1) out ------------- (C1) +
+  (P1) GND -------------------------------- (P2) GND & (C1) - 
+
+  - 5V Power supply (P2) and ESP32 (U1)
+
+  (P2) USB out ----------- (U1) USB in
+
+  - motor driver (U2) and motor (M1) 
+
+  (U2) M+ ---------------- (M1) M+
+  (U2) M- ---------------- (M1) M-
+
+
+***************************************************************************************
 */
 
-// OLED display Lib
+#define MASTER // use: MASTER or SLAVE
 
-#include <SPI.h>
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <EEPROM.h>
+// define use:
+// HALL = normal operation, real HALL sensor connected to pin GPIO 34
+// HW_EMU = debugg operation without Hall sensor. GIPO 17 emulates Sensor signal. Needs tbe wire jumpered to GPIO 34 (IRQ input)
+// SW_EMU = debugg operation without Hall sensor. ISR is called periodically by SW. 
+
+#define HALL // or HW_EMU or SW_EMU or HALL
+
+#define OLED_Display
+
+// includes
+  #include <Preferences.h>
+  #include <WiFi.h>
+  #include <WiFiUdp.h>
+  #include "AsyncUDP.h"
+  #include <ArduinoOTA.h>
+  #include "esp_attr.h" // TODO: check if still required
+  #include <Bounce2.h>
+#ifdef OLED_Display
+  #include <Adafruit_GFX.h>
+  #include <Adafruit_SSD1306.h>
+#endif
 
 
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 32 // OLED display height, in pixels
+// constant definition
 
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-// The pins for I2C are defined by the Wire-library.
-// On an arduino UNO:       A4(SDA), A5(SCL)
-// On an arduino MEGA 2560: 20(SDA), 21(SCL)
-// On an arduino LEONARDO:   2(SDA),  3(SCL), ...
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+// WLAN credential
 
-#define NUMFLAKES     10 // Number of snowflakes in the animation example
+  const char * ssid = "******";
+  const char * password = "********";
 
-#define LOGO_HEIGHT   16
-#define LOGO_WIDTH    16
-static const unsigned char PROGMEM logo_bmp[] =
-{ 0b00000000, 0b11000000,
-  0b00000001, 0b11000000,
-  0b00000001, 0b11000000,
-  0b00000011, 0b11100000,
-  0b11110011, 0b11100000,
-  0b11111110, 0b11111000,
-  0b01111110, 0b11111111,
-  0b00110011, 0b10011111,
-  0b00011111, 0b11111100,
-  0b00001101, 0b01110000,
-  0b00011011, 0b10100000,
-  0b00111111, 0b11100000,
-  0b00111111, 0b11110000,
-  0b01111100, 0b11110000,
-  0b01110000, 0b01110000,
-  0b00000000, 0b00110000
+ // IP addresses and ports
+
+  //   |---> OSCapp ------ [touch events] ------> MASTER ------ [touch events, possition & status] ------> SLAVE ------ [Possition & status ] ----->|
+  //   |                                                                                                                                            |
+  //   |<-------------------------------------------------------------------------------------------------------------------------------------------|
+
+ 
+ 
+#ifdef MASTER
+  const int ListenPort = 1235; // Master 
+  const int SendToIPAddr[] = {192, 168, 2, 77}; // Slave IP 
+  const int SendToPort = 1236; // Slave Port 
+#endif
+
+#ifdef SLAVE
+  const int ListenPort = 1236; // Slave
+  const int SendToIPAddr[] = {192, 168, 2, 21}; // OSCapp IP
+  const int SendToPort = 1234; // OSCApp Port
+#endif 
+ 
+ 
+  // - motor control pins
+
+
+  const byte R_PWM = 26;
+  const byte L_PWM = 25;
+
+// Hall Sensor module KY-003 (A3144 chip) w/ digital output
+// Note: Hall sensor module KY-035 (AH49E chip) was not used 
+
+  const byte interruptPin = 34;
+
+  const byte LED1 = 17;
+  const byte LED2 = 16;
+
+  const byte emulatedPushButton1 = 32;
+  const byte emulatedPushButton2 = 33;
+
+  const byte butPin[] = {             // Pin-Nummern der angeschlossenen Tasten
+    27, 14
+  };
+
+  const int ADC_pin = 36;
+
+
+// setting PWM properties
+  const int freq = 1000;
+  const int R_PWMChannel = 0;
+  const int L_PWMChannel = 1;
+  const int resolution = 8; //bit
+
+  const byte PositionAllUp = 0;  // all up
+
+ 
+  
+  AsyncUDP udps;
+  AsyncUDP udpc;
+
+
+  Preferences preferences;
+
+  unsigned char* udpdata; // declare a pointer to a char array
+  unsigned int udplength;
+
+#ifdef MASTER
+  unsigned char led1on[]  = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x31, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x3f, 0x80, 0x00, 0x00 };
+  unsigned char led1off[] = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x31, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  unsigned char* pled1 = led1off; 
+  
+  unsigned char led2on[]  = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x32, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x3f, 0x80, 0x00, 0x00 };
+  unsigned char led2off[] = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x32, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  unsigned char* pled2  = led2off;
+#endif
+
+#ifdef SLAVE
+  unsigned char led1on[]  = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x33, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x3f, 0x80, 0x00, 0x00 };
+  unsigned char led1off[] = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x33, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  unsigned char* pled1 = led1off;
+  
+  unsigned char led2on[]  = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x34, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x3f, 0x80, 0x00, 0x00 };
+  unsigned char led2off[] = {0x2f, 0x31, 0x2f, 0x6c, 0x65, 0x64, 0x34, 0x2F, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  unsigned char* pled2  = led2off;
+#endif
+
+
+  enum {
+  leftFADER, rightFADER
 };
 
-//Bounce Lib
+#ifdef MASTER
+ //fader1
+  unsigned char fader1[] = {0x2F, 0x31, 0x2F, 0x66, 0x61, 0x64, 0x65, 0x72, 0x31, 0x00, 0x00, 0x00, 0x2C, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // last four bytes are the float value of the fader position
+  unsigned char* pfader1; 
+  float fader1Pos;
+  float oldfader1Pos;
+#endif
 
-#include <Bounce2.h>
+#ifdef SLAVE
+  //fader2
+  unsigned char  fader1[] = {0x2F, 0x31, 0x2F, 0x66, 0x61, 0x64, 0x65, 0x72, 0x32, 0x00, 0x00, 0x00, 0x2C, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // last four bytes are the float value of the fader position
+  unsigned char* pfader1;
+  float fader1Pos;
+  float oldfader1Pos;
+#endif
+
+
+  byte * tmp;
+
+  byte result = 0;
+  
+  
+  String txt= "";
+  
+
+  
+#ifdef OLED_Display
+  
+  // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+  // The pins for I2C are defined by the Wire-library.
+  // On an arduino UNO:       A4(SDA), A5(SCL)
+  // On an arduino MEGA 2560: 20(SDA), 21(SCL)
+  // On an arduino LEONARDO:   2(SDA),  3(SCL), ...
+  
+  #define SCREEN_WIDTH 128 // OLED display width, in pixels
+  #define SCREEN_HEIGHT 32 // OLED display height, in pixels
+  #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+  #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+
+  Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+#endif
+
+// Arduino Pin-mapping
+
+//IBT_2 BTS7960 based motor control module
+// VCC connects to 5V of the arduino PCB
+
+ 
 
 
 
-// Motorsteuerung
-
-int R_IS = 1;
-int R_EN = 7;
-int R_PWM = 3;
-int L_IS = 4;
-int L_EN = 5;
-int L_PWM = 6;
-
-// Motorsteuerung finish
 
 
-//Hall Sensor
-const byte interruptPin = 2;
-volatile int counter = 0;
 
-int POSmin = 0;  // all up
-int POSmax = 0; // all down
-float POSactual = 0;
 
+
+
+//uint8_t* OSC_Rx;
+int  OSC_len;
+String OSCcmd = "";
+
+
+
+
+
+
+int  PositionAllDown  = 0;                // this detined the allDown position. It is set during calibration
+float currentPosition = 0;              // this will be tracked during up/down movement. The range is min. PositionAllUp and max. PossitionAllDown.
+float oldPosition = 0;
+unsigned int writes = 0; // byte writes = 0;
 int POSdir = +1;
 bool engineRunning = false;
 String TMP;
 
 
-// end
 
+
+// There are only two push-buttons to control and calibrate the system
+// 
+// normal mode:
+//    "move blinds up": single push of up-button
+//    "move blinds down: single push of down-button
+//    "stop at current possition if moving": single push of up-or donw-button
+// 
+// calibration mode: 
+//    "enter calibration mode": push both buttons simultaniously until sound is audible ( 4 low-tone beeps followed by 5 high-tone beeps)
+//    "calibrate upper blind possition": 
+//    "calibrate lower blind possition": 
 
 unsigned long now;                  // Aktueller Zeitpunkt
 
 // _Entprellung
 
 #define INPUTMODE INPUT             // INPUT oder INPUT_PULLUP
-const byte butPin[] = {             // Pin-Nummern der angeschlossenen Tasten
-  12, 13
-};
+
+
 #define NUM_BUTTONS sizeof(butPin)  // Die Anzahl der Tasten durch die Anzahl der Bytes des Arrays butPin ermitteln (wird automatisch definiert)
 Bounce debouncer[NUM_BUTTONS];      // Mehrere Bounce-Instanzen erstellen
 bool bState[NUM_BUTTONS];           // Speichert den Zustand des Pins
@@ -130,13 +425,13 @@ byte bCount;                        // Anzahl der gleichzeitig gedrückt gehalte
 byte bMenue;
 byte bMenueOld;
 enum {
-  MAIN, CAL
+  MOVE, CAL
 };
 
 byte bCommand;
 byte previous_bCommand;
 enum {
-  UP, DOWN, STOPPED
+  UP, DOWN, STOP
 };
 
 byte calState;
@@ -146,8 +441,8 @@ enum {
 
 
 
-long hangoutCNTR = 0;
-bool prepareSTOP = false;
+
+bool requestSTOP = false;
 
 
 String ver = __FILE__;
@@ -157,45 +452,320 @@ float Sample;
 float Voltage;
 long lowVoltage= 0;
 
-void setup()
-{
-  Serial.begin(9600);
+long cal_wait_time =0;
+long emulate_Hall_time =0;
+bool EmulatedHallTrigger = false;
 
-  if((EEPROM.read(6) != 12) || (EEPROM.read(7) != 210)) {
-    EEPROM.update(5, 0); // POSmax init
-    EEPROM.put(8,0); //POSactual init
+
+unsigned char fader1step= 0;
+unsigned char fader2step= 0;
+float fadersteps[]={.2, .5, .8};
+
+
+long oldCrone1time = 0;
+long oldCrone2time = 0;
+bool ISR_hallFlag = false;
+
+
+// various pre-sets
+  
+int cal_wait_duration = 3000; // ms  the is the wait time during cal(-ibration mode. x ms after the last key push to switch from uper limit cal to lowerlimit cal abd then x ms to finish cal.
+
+bool triggeredISR= false;
+
+/*
+ * *********************************************************
+ * *********************************************************
+ * *********************************************************
+ */
+
+String check = "";
+
+
+void ISR_action() {
+
+ triggeredISR = false;
+ currentPosition = currentPosition + POSdir;
+  
+ 
+ 
+  if (bMenue == MOVE) { // MOVE
+     UDP_Pos2Fader();
+    if (currentPosition <= PositionAllUp || currentPosition >= PositionAllDown || requestSTOP) { //requestSTOP is set e.g. in CAL STOP, MOVE STOP or MOVE is upper or lower limit is reached
+        
+      bCommand = STOP;       
+      EmulatedHallTrigger= false;
+      motor(STOP);
+  
+
+      }
+  }
+  else if (bMenue == CAL) {
+    if (POSdir >0 ){
+
+      UDP_Fader_stepdown(); 
+    }else{
+
+      UDP_Fader_stepup();  
+    }
+ 
+
+    if (requestSTOP) { //requestSTOP is set e.g. in CAL STOP, MOVE STOP or MOVE is upper or lower limit is reached
+              
+       bCommand = STOP; 
+       EmulatedHallTrigger= false;
+       motor(STOP);
+ 
+      }
+    
   }
 
-  POSmax = EEPROM.read(5);
-  EEPROM.get(8, POSactual);
+}
 
+void IRAM_ATTR ISR_hallTMP() { 
+  
+    
+    triggeredISR = true;
+
+} 
+
+/*
+ * *********************************************************
+ * *************** SETUP ***********************************
+ * *********************************************************
+
+
+ */
+
+
+void setup() { //§1
+  Serial.begin(115200);
+
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+  digitalWrite(LED1, HIGH);
+  digitalWrite(LED2, LOW);
+
+  pinMode(emulatedPushButton1, OUTPUT);
+  pinMode(emulatedPushButton2, OUTPUT);
+  digitalWrite(emulatedPushButton1, LOW);
+  digitalWrite(emulatedPushButton2, LOW);
+  
+
+
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  if (WiFi.waitForConnectResult() != WL_CONNECTED) {
+      Serial.println("WiFi Failed");
+      while(1) {
+          delay(1000);
+      }
+  }
+
+
+#ifdef MASTER
+  ArduinoOTA.setHostname("shutter_master");
+#endif 
+
+#ifdef SLAVE
+  ArduinoOTA.setHostname("shutter_slave");
+#endif 
+
+  ArduinoOTA.setPassword("1234");
+  ArduinoOTA.begin();
+
+
+    if(udps.listen(ListenPort)) {
+       // Serial.print("UDP Listening on IP: ");
+       // Serial.println(WiFi.localIP());
+        udps.onPacket([](AsyncUDPPacket packets) {
+       //     Serial.print("UDP Packet Type: ");
+       //     Serial.print(packets.isBroadcast()?"Broadcast":packets.isMulticast()?"Multicast":"Unicast");
+       //     Serial.print(", From: ");
+       //     Serial.print(packets.remoteIP());
+       //     Serial.print(":");
+       //     Serial.print(packets.remotePort());
+       //     Serial.print(", To: ");
+       //     Serial.print(packets.localIP());
+       //     Serial.print(":");
+       //     Serial.print(packets.localPort());
+       //     Serial.print(", Length: ");
+       //     Serial.print(packets.length());
+            //Serial.print(", Datax: ");
+
+            udpdata = packets.data();
+            udplength = packets.length();            
+
+#ifdef MASTER     
+            int pushup = 49;
+            int pushDown = 50;
+#endif
+
+#ifdef SLAVE
+            int pushup = 51;
+            int pushDown = 52;
+#endif
+             // UP1
+            if (packets.data()[7] == pushup){ //push1 || push3
+
+              if(packets.data()[16] == 63){ // pushed
+             //   Serial.println("UP1 - pushed");
+                digitalWrite(emulatedPushButton1, HIGH);
+              }
+
+              if(packets.data()[16] == 0){ // released
+              //  Serial.println("UP1 - released");
+                digitalWrite(emulatedPushButton1, LOW);
+              }
+            }
+           // DOWN1
+           if (packets.data()[7] == pushDown ){ //push2 || push4
+
+            if(packets.data()[16] == 63){ // pushed
+              //Serial.println("DOWN1 - pushed");
+              digitalWrite(emulatedPushButton2, HIGH);
+            }
+
+            if(packets.data()[16] == 0){ // released
+             // Serial.println("DOWN1 - released");
+              digitalWrite(emulatedPushButton2, LOW);
+            }
+          }          
+     
+
+       
+            udpc.write(udpdata, udplength); // also send OSC data to #2
+            
+        });
+
+        
+    }
+
+    if(udpc.connect(IPAddress(SendToIPAddr[0],SendToIPAddr[1],SendToIPAddr[2], SendToIPAddr[3]), SendToPort)) {
+       // Serial.println("UDP connected");
+        udpc.onPacket([](AsyncUDPPacket packet) {
+        /*    Serial.print("UDP Packet Type: ");
+            Serial.print(packet.isBroadcast()?"Broadcast":packet.isMulticast()?"Multicast":"Unicast");
+            Serial.print(", From: ");
+            Serial.print(packet.remoteIP());
+            Serial.print(":");
+            Serial.print(packet.remotePort());
+            Serial.print(", To: ");
+            Serial.print(packet.localIP());
+            Serial.print(":");
+            Serial.print(packet.localPort());
+            Serial.print(", Length: ");
+            Serial.print(packet.length());
+            Serial.print(", Datay: ");
+            Serial.write(packet.data(), packet.length());
+            Serial.println();
+            */
+            //reply to the client
+            packet.printf("Got %u bytes of data", packet.length());
+        });
+        //Send unicast
+        //udpc.print("Hello Server!");
+        
+    }
+    
+
+
+
+  
+  bMenue = MOVE;
+  bMenueOld = -1;
+  bCommand = STOP;
+
+
+
+   // initialize the Flash storage (ESP32)
+  
+  preferences.begin("APPstatus", false);// initialize Flash name space 
+
+     // configure LED PWM functionalitites
+  ledcSetup(R_PWMChannel, freq, resolution);
+  ledcSetup(L_PWMChannel, freq, resolution);
+  
+  // attach the channel to the GPIO to be controlled
+  ledcAttachPin(R_PWM, R_PWMChannel);
+  ledcAttachPin(L_PWM, L_PWMChannel);
+
+
+
+ //int counter = preferences.getInt("counter", 0);
+
+
+ 
+
+  writes = preferences.getUInt("FlashWrites", 0);
+
+
+  
   ver2 =  (ver.substring((ver.lastIndexOf(".")), (ver.lastIndexOf("\\")) + 1));
   ver3 = (ver2.substring( (ver2.lastIndexOf("_")+1), (ver2.length()) ));
 
+  #ifdef OLED_Display  // ######################
   //OLED start
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) { //§1/1
     Serial.println(F("SSD1306 allocation failed"));
     for (;;); // Don't proceed, loop forever
+  }//§1/1
+  display.clearDisplay();
+  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE);        // Draw white text
+  display.setCursor(0, 0);            // Start at top-left corner
+  display.println(ver2);
+  display.println();
+  display.print("[");
+  display.print(ver3);
+  display.print("] EE#");
+  display.print(writes);
+ 
+ 
+  display.display();
+
+  delay(5000);
+ #endif             // ######################
+ 
+
+
+
+  if((preferences.getUInt("HWflag1", 0) != 13) || (preferences.getUInt("HWflag2", 0) != 211)) {  //  §1/2 HWflag1 (16) and HWflag2 (17)
+
+    preferences.putUInt("FlashWrites", 1); // initialize write counter
+
+  }
+  
+  unsigned int fail;
+  fail = preferences.getUInt("fail",0);
+  if (fail != 222) {
+      preferences.putUInt("PositionAllDown", 0); // PositionAllDown init 
+      float pointer = 0;    
+      preferences.putFloat("currentPosition", pointer); //currentPosition init 
+
+      cal_wait_duration = -1;
+      bMenue = CAL;
+               
+      bCommand = STOP;
+      calState = upper;
+      
+      toneLowToHigh();
+      cal_wait_time = millis();
+
   }
 
-            display.clearDisplay();
-            display.setTextSize(1);             // Normal 1:1 pixel scale
-            display.setTextColor(SSD1306_WHITE);        // Draw white text
-            display.setCursor(0, 0);            // Start at top-left corner
-            display.println(ver2);
-            display.println();
-            display.print("[");
-            display.print(ver3);
-            display.print("]");
-           
-           
-            display.display();
-            delay(5000);
 
-       
 
- 
+
+
+
+  preferences.putUInt("fail", 0); // Reset the fail flag of 222
+  
+
+  PositionAllDown = preferences.getUInt("PositionAllDown", 0);
+  currentPosition = preferences.getFloat("currentPosition", 0);
 
 
   for (int i = 0; i < NUM_BUTTONS; i++)
@@ -204,126 +774,198 @@ void setup()
     debouncer[i].attach(butPin[i]);
     debouncer[i].interval(10);
   }
-  bMenue = MAIN;
-  bMenueOld = -1;
-  bCommand = STOPPED;
 
+
+
+#ifdef HALL // real Hall sensor coneected to pin GPIO 34
   // Hall sensor config
 
   // Lege den Interruptpin als Inputpin mit Pullupwiderstand fest
-  pinMode(interruptPin, INPUT_PULLUP);
+  pinMode(interruptPin, INPUT);
   // Lege die ISR 'blink' auf den Interruptpin mit Modus 'CHANGE':
   // "Bei wechselnder Flanke auf dem Interruptpin" --> "Führe die ISR aus"
-  attachInterrupt(digitalPinToInterrupt(interruptPin), ISR_hall, FALLING);
+
+
+  attachInterrupt(interruptPin, ISR_hallTMP, FALLING);
+#endif
+
+#ifdef HW_EMU //emulation with GPIO 17 jumpered to IRQ input (GPIO 34)
+  // Hall sensor config
+
+  // Lege den Interruptpin als Inputpin mit Pullupwiderstand fest
+  pinMode(interruptPin, INPUT);
+  // Lege die ISR 'blink' auf den Interruptpin mit Modus 'CHANGE':
+  // "Bei wechselnder Flanke auf dem Interruptpin" --> "Führe die ISR aus"
+
+
+  attachInterrupt(interruptPin, ISR_hallTMP, FALLING);
+#endif
 
 
 
-  // Motorsteuerung
-  pinMode(R_IS, OUTPUT);
-  pinMode(R_EN, OUTPUT);
-  pinMode(R_PWM, OUTPUT);
-  pinMode(L_IS, OUTPUT);
-  pinMode(L_EN, OUTPUT);
-  pinMode(L_PWM, OUTPUT);
-  digitalWrite(R_IS, LOW);
-  digitalWrite(L_IS, LOW);
-  digitalWrite(R_EN, HIGH);
-  digitalWrite(L_EN, HIGH);
-}
 
 
+//for (;;);
+  
+} //§1
+
+/*
+ * *********************************************************
+ * ***************** LOOP **********************************
+ * *********************************************************
+ */
 
 void loop()
 {
+
+
+  ArduinoOTA.handle();
+
+#ifdef SW_EMU 
+  emulate_Hall_Sensor();
+#endif
+
+#ifdef HW_EMU
+  emulate_Hall_Sensor();
+#endif
+  
+  if (triggeredISR){
+
+    ISR_action();
+
+  }
+
+  
+
+  writes = preferences.getUInt("FlashWrites", 0);
+
+  
   now = millis(); // Aktueller Zeitpunkt
   debounce();
-
-  Sample = analogRead(A0);
-  Voltage = map(Sample, 0, 1023, 0, 250);
+  
+  delay(10); // this 10ms delay was requied is no OLED Display (also a delay) is used. It looked like polling the ADC too oftern in the loop caused wrong voltage readings which in turn shut the system down.
+  Sample = analogRead(ADC_pin);
+  
+  Voltage = map(Sample, 50, 3000, 1, 124);
   Voltage = Voltage/10;
-  //Serial.println(Voltage);
+  Serial.print(Sample);
+  Serial.println(Voltage);
 
-  if (Voltage < 11.00) {
+  if (Voltage < 11.00) { //11.00V
   
    lowVoltage = lowVoltage + 1;
   }
   else {
     lowVoltage = 0;
   }
-  
-  if (lowVoltage > 5) {
-    MainModeOLEDwrite("going2DIE", lowVoltage, 1);
-    if (bCommand == DOWN && POSactual > 0) {
-      EEPROM.put(8,POSactual+1);
-    }
-    else if (bCommand == UP && POSactual < POSmax){
-      EEPROM.put(8,POSactual-1);
-    }
-    else {
-      EEPROM.put(8,POSactual);
-    }
+
+  if (lowVoltage > 11) { //11
+
+ 
+    preferences.putFloat("currentPosition", currentPosition);
+    writes = preferences.getUInt("FlashWrites", 0);
+    writes++;
+    preferences.putUInt("FlashWrites", writes);
+    preferences.putUInt("fail", 222);
+
+    #ifdef OLED_Display  // ###################### 
+    MoveModeOLEDwrite("going2DIE", lowVoltage, 1);
+    #endif                // ######################
+
+        
+    motor(STOP); // Try to cut power to the motor to win few ms time for the EEPROM write to finish.  
     
     for (;;); // Don't proceed, loop forever
         
   }
 
  
-  selectMainOrCalMode();  // to enter CAL mode, push both buttons (up and down) at the same time.The return to Main is automatically after a delay counter.
-
-
-  switch (bMenue) { // MAIN or CAL mode
-
-
-    
-
-    case MAIN:
-       
-      UpTriggerButtonToggle();    // if Up-Button was pressed, check if motor is on. If yes, stop it and enter MAIN-STOPPED mode. If no, start motor and enter MAIN-UP mode
-
-      DownTriggerButtonToggle();  // if Down-Button was pressed, check if motor is on. If yes, stop it and enter MAIN-STOPPED mode. If no, start motor to move down.
+  checkCalRequested();  // 
 
   
-      switch (bCommand) { // Within MAIN mode: UP, DOWN or STOPPED mode
+  // State machine with two main modes (MOVE and CAL) and each three sub-modes (UP, DOWN, STOP) 
+  
+  switch (bMenue) { // MOVE or CAL mode
+
+    case MOVE:
+       
+      checkUpStartOrStopRequested();    // if Up-Button was pressed, check if motor is on. If yes, stop it and enter MOVE-STOP mode. If no, start motor and enter MOVE-UP mode
+
+      checkDownStartOrStopRequested();  // if Down-Button was pressed, check if motor is on. If yes, stop it and enter MOVE-STOP mode. If no, start motor to move down.
+
+  
+      switch (bCommand) { // Within MOVE mode: UP, DOWN or STOP mode
 
         case UP:
-          if (POSactual > POSmin) { // if not all up
+          if (currentPosition > PositionAllUp) { // if not all up
+
+            //Serial.println(currentPosition);
 
             if (!engineRunning) motor(UP);  // start motor to move up if its not already running                            
-            prepareSTOP = false;            // don't stop it during next ISR call
+            requestSTOP = false;            // don't stop it during next ISR call
             POSdir = -1;                    // as this is up movement, need to decrement the Hall sensor impulse counts in the ISR 
-            MainModeOLEDwrite("MAIN - up", POSactual, POSmax);      
-          }
-          else {                    // shutter is all up, stop motor
-            bCommand = STOPPED;
-            prepareSTOP = true;     //stop the motor the next time the ISR triggers. Stopping the motor only in the ISR ensures it always stops at a magnet, and not in between.                               
-            MainModeOLEDwrite("MAIN -stop", POSactual, POSmax);            
+            
+            #ifdef OLED_Display // ######################
+            MoveModeOLEDwrite("MOVE - up", currentPosition, PositionAllDown);      
+            #endif              // ######################
+
+
+
+         
+           }
+           else {                    // shutter is all up, stop motor
+            
+            bCommand = STOP;         // State machine now: MOVE-STOP mode
+            requestSTOP = true;      //stop the motor the next time the ISR triggers. Stopping the motor only in the ISR ensures it always stops at a magnet, and not in between.        
+
+            #ifdef OLED_Display  // ######################
+            MoveModeOLEDwrite("MOVE -stop", currentPosition, PositionAllDown);            
+            #endif               // ######################
+
+
+
+            
           }
           
           break;
 
         case DOWN:
 
-          if (POSactual < POSmax) { // if not all down
+          if (currentPosition < PositionAllDown) { // if not all down
 
             if (!engineRunning) motor(DOWN);  // start motor to move down if its not already running              
-            prepareSTOP = false;
+            requestSTOP = false;
             POSdir = 1;
-            MainModeOLEDwrite("MAIN -down", POSactual, POSmax);  
-            //
+
+            #ifdef OLED_Display  // ######################
+            MoveModeOLEDwrite("MOVE -down", currentPosition, PositionAllDown);  
+            #endif               // ######################
+          
+ 
+            
           }
           else {
-            bCommand = STOPPED;
-            prepareSTOP = true;  //stop the motor the next time the ISR triggers. Stopping the motor only in the ISR ensures it always stops at a magnet, and not in between.         
-           MainModeOLEDwrite("MAIN -stop", POSactual, POSmax);
-           //MainModeOLEDwrite("MAIN -stop", Voltage, 1);
+            bCommand = STOP;
+            requestSTOP = true;  //stop the motor the next time the ISR triggers. Stopping the motor only in the ISR ensures it always stops at a magnet, and not in between.  
+            
+           #ifdef OLED_Display    // ###################### 
+           MoveModeOLEDwrite("MOVE -stop", currentPosition, PositionAllDown);
+           #endif                 // ######################    
+
+    
+
           }
 
           break;
 
-        case STOPPED:
-          prepareSTOP = true; //stop the motor the next time the ISR triggers. Stopping the motor only in the ISR ensures it always stops at a magnet, and not in between.
-          MainModeOLEDwrite("MAIN -stop", POSactual, POSmax);
-          //MainModeOLEDwrite("MAIN -stop", Voltage, 1);
+        case STOP:
+          requestSTOP = true; //stop the motor the next time the ISR triggers. Stopping the motor only in the ISR ensures it always stops at a magnet, and not in between.
+
+          #ifdef OLED_Display    // ######################    
+          MoveModeOLEDwrite("MOVE -stop", currentPosition, PositionAllDown);
+          #endif                 // ######################
+
+          
           break;
       }
       break;
@@ -332,94 +974,111 @@ void loop()
 
 
     case CAL:
+   
+      checkUpStartRequested();     // check if Up button is held down, if yes enter CAL-UP mode. If not, check if CAL-DOWN mode is running, other wise stop the motor
       
-      UpButtonHold();     // check if Up button is held down, if yes enter CAL-UP mode. If not, check if CAL-DOWN mode is running, other wise stop the motor
-      
-      DownButtonHold();   // check if Down button is held down, if yes enter CAL-DOWN mode. If not, check if CAL-UP mode is running, other wise stop the motor
+      checkDownStartRequested();   // check if Down button is held down, if yes enter CAL-DOWN mode. If not, check if CAL-UP mode is running, other wise stop the motor
  
-      switch (bCommand) { // Within CAL mode: UP, DOWN or STOPPED mode
+      switch (bCommand) { // Within CAL mode: UP, DOWN or STOP mode
 
         case UP:
+          cal_wait_duration = 3000;
 
-          prepareSTOP = false;
+          
+          requestSTOP = false;
           POSdir = -1;
           if (!engineRunning) motor(UP); 
                 
-          hangoutCNTR = 0;
-
+      
+          
+          #ifdef OLED_Display    // ######################
           if (calState == upper) {
             CalModeOLEDwrite("CAL -upper", "use up/dwn");
           }
           else {
-            CalModeOLEDwrite("CAL -lower", "use up/dwn");
-          
+            CalModeOLEDwrite("CAL -lower", "use up/dwn");          
           }
+          #endif                 // ######################
+          
 
-    
+          cal_wait_time = millis();
           break;
 
         case DOWN:
-
-          prepareSTOP = false;
+          cal_wait_duration = 3000;
+          requestSTOP = false;
           POSdir = 1;
 
           if (!engineRunning) {
              motor(DOWN);
           }         
           
-          //Serial.println("CAL - going down");
-          hangoutCNTR = 0;
+      
+        
 
- 
+          #ifdef OLED_Display   // ######################
           if (calState == upper) {
             CalModeOLEDwrite("CAL -upper", "use up/dwn");
           }
           else {
-            CalModeOLEDwrite("CAL -lower", "use up/dwn");
-          
+            CalModeOLEDwrite("CAL -lower", "use up/dwn");          
           }
+          #endif                 // ######################
           
-            
+          
+          cal_wait_time = millis();  
           break;
 
-        case STOPPED:
-          prepareSTOP = true;
+        case STOP:
+          requestSTOP = true;
 
           
           if (calState == upper) {
 
+            #ifdef OLED_Display    // ######################
             CalModeOLEDwrite("CAL -upper", "use up/dwn");
+            #endif                 // ######################
              
-            POSactual = 0;
-            hangoutCNTR = hangoutCNTR + 1;
- 
-            if (hangoutCNTR == 100 ) {
-
-              calState = lower;
-              toneHighToLow();
-              hangoutCNTR = 0;
-
-
-            CalModeOLEDwrite("CAL -lower", "use up/dwn");
-
-            }  
+            currentPosition = 0;
+          
+  
+            if (cal_wait_duration != -1){ // if arrive from HE reset or normal power up, force to CAL mode and wait for action
+              
+            
+                if (millis()- cal_wait_time >= cal_wait_duration) {
+                  calState = lower;
+                  toneHighToLow();
+               
+                  cal_wait_time = millis(); 
+    
+                #ifdef OLED_Display    // ######################
+                CalModeOLEDwrite("CAL -lower", "use up/dwn");
+                #endif                 // ######################
+    
+                }  
+              }
           }
 
           if (calState == lower) {
-            POSmax = POSactual;
-     
-            
-            hangoutCNTR = hangoutCNTR + 1;
-  
-            if (hangoutCNTR == 50000) {
+            PositionAllDown = currentPosition;
+
+          
+            if (millis()- cal_wait_time >= cal_wait_duration) {
               
-              EEPROM.update(5,POSmax);
-              EEPROM.update(6, 12);
-              EEPROM.update(7,210);
-              EEPROM.put(8,POSactual);
-              bMenue = MAIN;
+              preferences.putUInt("PositionAllDown", PositionAllDown);
+              preferences.putUInt("HWflag1", 13);
+              preferences.putUInt("HWflag2", 211);
+              preferences.putFloat("currentPosition", currentPosition);
+  
+              writes = preferences.getUInt("FlashWrites", 0);
+              writes++;
+              preferences.putUInt("FlashWrites", writes);
+
+           
+              bMenue = MOVE;
               toneLowToLow();
-              hangoutCNTR = 0;
+              UDP_Pos2Fader();
+              
             }
           }
   
@@ -430,38 +1089,43 @@ void loop()
       break;
   }
 
-}
+  
+  crone1(5000, 1000);
+
+} // loop
 
 
 
 
-void selectMainOrCalMode()
+void checkCalRequested()
 {
-    if (bCmd[0] == M_HOLD && bCmd[1] == M_HOLD && bMenue == MAIN)  {
+    if (bCmd[0] == M_HOLD && bCmd[1] == M_HOLD && bMenue == MOVE)  {
    
       bMenue = CAL;
-      bCommand = STOPPED;
-      prepareSTOP = true;
+      
+      bCommand = STOP;
+      requestSTOP = true;
       calState = upper;
       
      
       bState[0] = UNHOLD;
       bState[1] = UNHOLD;
       toneLowToHigh();
+      cal_wait_time = millis();
     
     }
 }
 
 
-void UpTriggerButtonToggle()
+void checkUpStartOrStopRequested()
 {
-    if (bCmd[0] == S_HOLD) {  // was up key pressed?
+    if ( bCmd[0] == S_HOLD) {  // was up key pressed?
 
       if (bCommand == UP) {
-        bCommand = STOPPED;
+        bCommand = STOP;
       }
       else if (bCommand == DOWN) {
-        bCommand = STOPPED;
+        bCommand = STOP;
       }
       else {
         bCommand = UP;
@@ -470,14 +1134,14 @@ void UpTriggerButtonToggle()
 }
 
 
-void DownTriggerButtonToggle()
+void checkDownStartOrStopRequested()
 {
     if (bCmd[1] == S_HOLD) { // was down key pressed?
       if (bCommand == DOWN) {
-        bCommand = STOPPED;         
+        bCommand = STOP;         
       }
       else if (bCommand == UP) {
-        bCommand = STOPPED;
+        bCommand = STOP;
       }
       else {
         bCommand = DOWN;
@@ -486,27 +1150,28 @@ void DownTriggerButtonToggle()
 }
 
 
-void UpButtonHold()
+void checkUpStartRequested()
 {
     if (bState[0] == HOLD) bCommand = UP;
      
     else {
-      if (bCommand != DOWN) bCommand = STOPPED;
+      if (bCommand != DOWN) bCommand = STOP;
     }
 }
 
-void DownButtonHold()
+void checkDownStartRequested()
 {
     if (bState[1] == HOLD) bCommand = DOWN;
     
     else {
-      if (bCommand != UP) bCommand = STOPPED;
+      if (bCommand != UP) bCommand = STOP;
     }
 
 }
 
+#ifdef OLED_Display    // ######################
 
-void MainModeOLEDwrite(String text, float val1, int val2)
+void MoveModeOLEDwrite(String text, float val1, int val2)
 {
       display.clearDisplay();
       display.setTextSize(2);             
@@ -529,29 +1194,37 @@ void CalModeOLEDwrite(String txt1, String txt2)
       display.print(txt2);
       display.display();
 }
+#endif                 // ######################
+
 
 void motor(byte state)
 {
+    //Serial.println(state);
     switch(state)
     {
-        case STOPPED:
+
+  
+        case STOP:
           engineRunning = false;
-          analogWrite(L_PWM, 0);
-          analogWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
+          EmulatedHallTrigger = false;
           break;
-          
-        case UP:
-          analogWrite(R_PWM, 0);
-          analogWrite(L_PWM, 255);
+      
+        case UP: // UP
+          ledcWrite(R_PWMChannel, 0);
+          ledcWrite(L_PWMChannel, 255);
           engineRunning = true;
+          EmulatedHallTrigger = true;
           break;
-          
+         
        case DOWN:
-          analogWrite(L_PWM, 0);
-          analogWrite(R_PWM, 255);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 255);
           engineRunning = true;
+          EmulatedHallTrigger = true;
           break;
-        
+
     }
 
 }
@@ -559,79 +1232,134 @@ void motor(byte state)
 
 void toneLowToHigh()
 {
+  
+     
      for (int i = 0; i <= 3; i++) {    
-          analogWrite(L_PWM, 0);
-          analogWrite(R_PWM, 10);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 10);
 
           delay(200);
 
-          analogWrite(L_PWM, 0);
-          analogWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(200);
      }
 
      for (int i = 0; i <= 4; i++) {    
-          analogWrite(L_PWM, 10);
-          analogWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 20);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(100);
 
-          analogWrite(L_PWM, 0);
-          analogWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(100);
-     }     
-         
+          
+     }  
+     pled1 = led1on;
+     udpc.write(pled1, 20); 
+
+     
+      
 }
 
 
 void toneHighToLow()
 {
+     digitalWrite(LED2, HIGH);
+
+
+ 
      for (int i = 0; i <= 3; i++) {    
-          analogWrite(L_PWM, 10);
-          analogWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 20);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(200);
 
-          analogWrite(L_PWM, 0);
-          analogWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(200);
      }
 
      for (int i = 0; i <= 4; i++) {    
-          analogWrite(L_PWM, 0);
-          analogWrite(R_PWM, 10);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 10);
 
           delay(100);
 
-          analogWrite(L_PWM, 0);
-          analogWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(100);
-     }     
-         
+     }   
+     pled1 = led1off;
+     udpc.write(pled1, 20);
+
+     pled2 = led2on;
+     udpc.write(pled2, 20);
+
+               
+     digitalWrite(LED2, LOW);
 }
-
 
 void toneLowToLow()
 {
+
+
+
+     pled1 = led1on;
+     udpc.write(pled1, 20);
+
+     pled2 = led2on;
+     udpc.write(pled2, 20);
+
      for (int i = 0; i <= 6; i++) {    
-          analogWrite(L_PWM, 0);
-          analogWrite(R_PWM, 10);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 10);
 
           delay(50);
 
-          analogWrite(L_PWM, 0);
-          analogWrite(R_PWM, 0);
+          ledcWrite(L_PWMChannel, 0);
+          ledcWrite(R_PWMChannel, 0);
 
           delay(50);
      }
+     pled1 = led1off;
+     udpc.write(pled1, 20);
 
-   
-         
+     pled2 = led2off;
+     udpc.write(pled2, 20); 
+
+        
 }
+
+
+// debounce2 lib is used but still needed some code to check if multiple keys are pressed at the same time. 
+// the below code (debounce()) from the arduino forum did the job
+//https://forum.arduino.cc/t/tastenabfrage-mehrerer-tasten-inkl-entprellung-und-sonderfunktionalitaten/378613
+
+
+/*
+
+   Tastenauswertungsalgorithmus
+
+   Tastenzustände können folgendermaßen abgefragt werden:
+
+   Beispiele:
+
+   if (bState[7] == HOLD)                                         // Wird die Taste 7 momentan gedrückt gehalten?
+   if (bCmd[3] == PUSH)                                           // Wurde die Taste 3 gedrückt?
+   if (bCmd[1] == S_HOLD)                                         // Wurde die Taste 1 pushDur ms lang gedrückt gehalten?
+   if (bCmd[2] == M_HOLD && bCmd[4] == M_HOLD)                    // Wurden die Tasten 2 und 4 pushDur ms lang gedrückt gehalten, unabhängig davon, ob weiteren Tasten gedrückt gehalten werden?
+   if (bCmd[5] == M_HOLD && bCmd[6] == M_HOLD && bCount == 2)     // Wurden die Tasten 5 und 6 pushDur ms lang gedrückt gehalten, während keine weiteren Tasten gedrückt gehalten werden?
+                                                                  // bCount sollte der Summe der abzufragenden Tasten entsprechen.
+
+   Werden mehr als 255 Tasten benötigt, muss der Wertebereich von butPin und bCount jeweils in Integer geändert werden.
+
+*/
 
 void debounce()
 {
@@ -674,13 +1402,13 @@ void debounce()
 
     if (debouncer[i].rose())
     {
-      // Serial.println("rose");
+      
       bCmd[i] = PUSH;
       bState[i] = HOLD;
     }
     else if (debouncer[i].fell())
     {
-      // Serial.println("fell");
+      
       bCmd[i] = RELEASE;
       bState[i] = UNHOLD;
     }
@@ -688,329 +1416,145 @@ void debounce()
 }
 
 
+void UDP_Pos2Fader() {
+
+ 
+    fader1Pos = currentPosition/PositionAllDown;
+    tmp = (byte*)&fader1Pos;
+    fader1[16] = *(tmp+3);
+    fader1[17] = *(tmp+2);
+    fader1[18] = *(tmp+1);
+    fader1[19] = *tmp;
+
+    pfader1 = fader1;
+
+    udpc.write(pfader1, 20);  
+
+     
+}
+
+
+
+void UDP_Fader_stepdown() {
+
+    if(fader1step < 2){
+      fader1step += 1;
+    } else {
+      fader1step = 0;
+    }
+
+    fader1Pos = fadersteps[fader1step];
+    if (fader1Pos != oldfader1Pos) { 
+      tmp = (byte*)&fader1Pos;
+      fader1[16] = *(tmp+3);
+      fader1[17] = *(tmp+2);
+      fader1[18] = *(tmp+1);
+      fader1[19] = *tmp;
+
+      pfader1 = fader1;
+
+      udpc.write(pfader1, 20);
+      oldfader1Pos = fader1Pos;  
+    }
+      
+}
+
+void UDP_Fader_stepup() {
+         
+    if(fader1step > 0){
+      fader1step -= 1;
+    } else {
+      fader1step = 2;
+    }
+
+    fader1Pos = fadersteps[fader1step];
+    if (fader1Pos != oldfader1Pos) { 
+      tmp = (byte*)&fader1Pos;
+      fader1[16] = *(tmp+3);
+      fader1[17] = *(tmp+2);
+      fader1[18] = *(tmp+1);
+      fader1[19] = *tmp;
+
+      pfader1 = fader1;
+
+      udpc.write(pfader1, 20);
+      oldfader1Pos = fader1Pos;  
+    }
+}
+
+
+
+
+void emulate_Hall_Sensor() {
+
+   if (millis()- emulate_Hall_time >= 333 & EmulatedHallTrigger) {
+
+    emulate_Hall_time = millis();
+#ifdef SW_EMU
+    ISR_hallTMP();  
+#endif
+
+#ifdef HW_EMU
+    digitalWrite(LED1, LOW);
+    delay(50);
+    digitalWrite(LED1, HIGH);
+#endif 
+   }
+    
+  
+}
+
 
 
 void ISR_hall() {
   
-  POSactual = POSactual + POSdir;
-
+  currentPosition = currentPosition + POSdir;
  
-  if (bMenue == MAIN) {
-    if (POSactual <= POSmin || POSactual >= POSmax || prepareSTOP) {
+  if (bMenue == MOVE) {
+    if (currentPosition <= PositionAllUp || currentPosition >= PositionAllDown || requestSTOP) {
         
-          bCommand = STOPPED; 
-      
-        motor(STOPPED);
+          bCommand = STOP;       
+        motor(STOP);
   
 
       }
   }
   else if (bMenue == CAL) {
 
-    if (prepareSTOP) {
+    if (requestSTOP) {
         
-        bCommand = STOPPED; 
-        motor(STOPPED);
+        bCommand = STOP; 
+        motor(STOP);
  
       }
     
   }
 
- 
 }
 
-//OLED stuff
 
-void testdrawline() {
-  int16_t i;
+void crone1(long wait, int repeat){  // set just started OSC app with Led and Fader status
 
-  display.clearDisplay(); // Clear display buffer
+  
+  now= millis();
+  if (now > wait){
+    if (now - oldCrone1time > repeat){
 
-  for (i = 0; i < display.width(); i += 4) {
-    display.drawLine(0, 0, i, display.height() - 1, SSD1306_WHITE);
-    display.display(); // Update screen with each newly-drawn line
-    delay(1);
-  }
-  for (i = 0; i < display.height(); i += 4) {
-    display.drawLine(0, 0, display.width() - 1, i, SSD1306_WHITE);
-    display.display();
-    delay(1);
-  }
-  delay(250);
+      udpc.write(pled1, 20);
+      udpc.write(pled2, 20);
+      if (!engineRunning){
 
-  display.clearDisplay();
-
-  for (i = 0; i < display.width(); i += 4) {
-    display.drawLine(0, display.height() - 1, i, 0, SSD1306_WHITE);
-    display.display();
-    delay(1);
-  }
-  for (i = display.height() - 1; i >= 0; i -= 4) {
-    display.drawLine(0, display.height() - 1, display.width() - 1, i, SSD1306_WHITE);
-    display.display();
-    delay(1);
-  }
-  delay(250);
-
-  display.clearDisplay();
-
-  for (i = display.width() - 1; i >= 0; i -= 4) {
-    display.drawLine(display.width() - 1, display.height() - 1, i, 0, SSD1306_WHITE);
-    display.display();
-    delay(1);
-  }
-  for (i = display.height() - 1; i >= 0; i -= 4) {
-    display.drawLine(display.width() - 1, display.height() - 1, 0, i, SSD1306_WHITE);
-    display.display();
-    delay(1);
-  }
-  delay(250);
-
-  display.clearDisplay();
-
-  for (i = 0; i < display.height(); i += 4) {
-    display.drawLine(display.width() - 1, 0, 0, i, SSD1306_WHITE);
-    display.display();
-    delay(1);
-  }
-  for (i = 0; i < display.width(); i += 4) {
-    display.drawLine(display.width() - 1, 0, i, display.height() - 1, SSD1306_WHITE);
-    display.display();
-    delay(1);
-  }
-
-  delay(2000); // Pause for 2 seconds
-}
-
-void testdrawrect(void) {
-  display.clearDisplay();
-
-  for (int16_t i = 0; i < display.height() / 2; i += 2) {
-    display.drawRect(i, i, display.width() - 2 * i, display.height() - 2 * i, SSD1306_WHITE);
-    display.display(); // Update screen with each newly-drawn rectangle
-    delay(1);
-  }
-
-  delay(2000);
-}
-
-void testfillrect(void) {
-  display.clearDisplay();
-
-  for (int16_t i = 0; i < display.height() / 2; i += 3) {
-    // The INVERSE color is used so rectangles alternate white/black
-    display.fillRect(i, i, display.width() - i * 2, display.height() - i * 2, SSD1306_INVERSE);
-    display.display(); // Update screen with each newly-drawn rectangle
-    delay(1);
-  }
-
-  delay(2000);
-}
-
-void testdrawcircle(void) {
-  display.clearDisplay();
-
-  for (int16_t i = 0; i < max(display.width(), display.height()) / 2; i += 2) {
-    display.drawCircle(display.width() / 2, display.height() / 2, i, SSD1306_WHITE);
-    display.display();
-    delay(1);
-  }
-
-  delay(2000);
-}
-
-void testfillcircle(void) {
-  display.clearDisplay();
-
-  for (int16_t i = max(display.width(), display.height()) / 2; i > 0; i -= 3) {
-    // The INVERSE color is used so circles alternate white/black
-    display.fillCircle(display.width() / 2, display.height() / 2, i, SSD1306_INVERSE);
-    display.display(); // Update screen with each newly-drawn circle
-    delay(1);
-  }
-
-  delay(2000);
-}
-
-void testdrawroundrect(void) {
-  display.clearDisplay();
-
-  for (int16_t i = 0; i < display.height() / 2 - 2; i += 2) {
-    display.drawRoundRect(i, i, display.width() - 2 * i, display.height() - 2 * i,
-                          display.height() / 4, SSD1306_WHITE);
-    display.display();
-    delay(1);
-  }
-
-  delay(2000);
-}
-
-void testfillroundrect(void) {
-  display.clearDisplay();
-
-  for (int16_t i = 0; i < display.height() / 2 - 2; i += 2) {
-    // The INVERSE color is used so round-rects alternate white/black
-    display.fillRoundRect(i, i, display.width() - 2 * i, display.height() - 2 * i,
-                          display.height() / 4, SSD1306_INVERSE);
-    display.display();
-    delay(1);
-  }
-
-  delay(2000);
-}
-
-void testdrawtriangle(void) {
-  display.clearDisplay();
-
-  for (int16_t i = 0; i < max(display.width(), display.height()) / 2; i += 5) {
-    display.drawTriangle(
-      display.width() / 2  , display.height() / 2 - i,
-      display.width() / 2 - i, display.height() / 2 + i,
-      display.width() / 2 + i, display.height() / 2 + i, SSD1306_WHITE);
-    display.display();
-    delay(1);
-  }
-
-  delay(2000);
-}
-
-void testfilltriangle(void) {
-  display.clearDisplay();
-
-  for (int16_t i = max(display.width(), display.height()) / 2; i > 0; i -= 5) {
-    // The INVERSE color is used so triangles alternate white/black
-    display.fillTriangle(
-      display.width() / 2  , display.height() / 2 - i,
-      display.width() / 2 - i, display.height() / 2 + i,
-      display.width() / 2 + i, display.height() / 2 + i, SSD1306_INVERSE);
-    display.display();
-    delay(1);
-  }
-
-  delay(2000);
-}
-
-void testdrawchar(void) {
-  display.clearDisplay();
-
-  display.setTextSize(1);      // Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE); // Draw white text
-  display.setCursor(0, 0);     // Start at top-left corner
-  display.cp437(true);         // Use full 256 char 'Code Page 437' font
-
-  // Not all the characters will fit on the display. This is normal.
-  // Library will draw what it can and the rest will be clipped.
-  for (int16_t i = 0; i < 256; i++) {
-    if (i == '\n') display.write(' ');
-    else          display.write(i);
-  }
-
-  display.display();
-  delay(2000);
-}
-
-void testdrawstyles(void) {
-  display.clearDisplay();
-
-  display.setTextSize(2);             // Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE);        // Draw white text
-  display.setCursor(0, 0);            // Start at top-left corner
-  display.println(F("Cal up"));
-  //display.setCursor(0,5);             // Start at top-left corner
-  display.println(F("Cal up2"));
-  //display.startscrollleft(0x00, 0x0F);
-  //display.println(F("Line2"));
-  //display.println(F("Line3"));
-  //  display.setTextColor(SSD1306_BLACK, SSD1306_WHITE); // Draw 'inverse' text
-  //  display.println(3.141592);
-
-  //  display.setTextSize(2);             // Draw 2X-scale text
-  //  display.setTextColor(SSD1306_WHITE);
-  //  display.print(F("0x")); display.println(0xDEADBEEF, HEX);
-
-  display.display();
-  delay(2000);
-}
-
-void testscrolltext(void) {
-  display.clearDisplay();
-
-  display.setTextSize(2); // Draw 2X-scale text
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(10, 0);
-  display.println(F("scroll"));
-  display.display();      // Show initial text
-  delay(100);
-
-  // Scroll in various directions, pausing in-between:
-  display.startscrollright(0x00, 0x0F);
-  delay(2000);
-  display.stopscroll();
-  delay(1000);
-  display.startscrollleft(0x00, 0x0F);
-  delay(2000);
-  display.stopscroll();
-  delay(1000);
-  display.startscrolldiagright(0x00, 0x07);
-  delay(2000);
-  display.startscrolldiagleft(0x00, 0x07);
-  delay(2000);
-  display.stopscroll();
-  delay(1000);
-}
-
-void testdrawbitmap(void) {
-  display.clearDisplay();
-
-  display.drawBitmap(
-    (display.width()  - LOGO_WIDTH ) / 2,
-    (display.height() - LOGO_HEIGHT) / 2,
-    logo_bmp, LOGO_WIDTH, LOGO_HEIGHT, 1);
-  display.display();
-  delay(1000);
-}
-
-#define XPOS   0 // Indexes into the 'icons' array in function below
-#define YPOS   1
-#define DELTAY 2
-
-void testanimate(const uint8_t *bitmap, uint8_t w, uint8_t h) {
-  int8_t f, icons[NUMFLAKES][3];
-
-  // Initialize 'snowflake' positions
-  for (f = 0; f < NUMFLAKES; f++) {
-    icons[f][XPOS]   = random(1 - LOGO_WIDTH, display.width());
-    icons[f][YPOS]   = -LOGO_HEIGHT;
-    icons[f][DELTAY] = random(1, 6);
-    Serial.print(F("x: "));
-    Serial.print(icons[f][XPOS], DEC);
-    Serial.print(F(" y: "));
-    Serial.print(icons[f][YPOS], DEC);
-    Serial.print(F(" dy: "));
-    Serial.println(icons[f][DELTAY], DEC);
-  }
-
-  for (;;) { // Loop forever...
-    display.clearDisplay(); // Clear the display buffer
-
-    // Draw each snowflake:
-    for (f = 0; f < NUMFLAKES; f++) {
-      display.drawBitmap(icons[f][XPOS], icons[f][YPOS], bitmap, w, h, SSD1306_WHITE);
-    }
-
-    display.display(); // Show the display buffer on the screen
-    delay(200);        // Pause for 1/10 second
-
-    // Then update coordinates of each flake...
-    for (f = 0; f < NUMFLAKES; f++) {
-      icons[f][YPOS] += icons[f][DELTAY];
-      // If snowflake is off the bottom of the screen...
-      if (icons[f][YPOS] >= display.height()) {
-        // Reinitialize to a random position, just off the top
-        icons[f][XPOS]   = random(1 - LOGO_WIDTH, display.width());
-        icons[f][YPOS]   = -LOGO_HEIGHT;
-        icons[f][DELTAY] = random(1, 6);
+         UDP_Pos2Fader();
       }
+     
+
+      oldCrone1time = now;
     }
   }
+
 }
+
+
+
+
+ 
