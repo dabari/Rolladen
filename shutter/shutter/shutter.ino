@@ -205,6 +205,7 @@ Wiring
 #define OLED_Display
 
 // includes
+  #include "arduino_secrets.h"
   #include <Preferences.h>
   #include <WiFi.h>
   #include <WiFiUdp.h>
@@ -222,8 +223,8 @@ Wiring
 
 // WLAN credential
 
-  const char * ssid = "******";
-  const char * password = "********";
+  const char * ssid     = SECRET_SSID;
+  const char * password = SECRET_PASS;
 
  // IP addresses and ports
 
@@ -610,12 +611,12 @@ void setup() { //§1
             if (packets.data()[7] == pushup){ //push1 || push3
 
               if(packets.data()[16] == 63){ // pushed
-             //   Serial.println("UP1 - pushed");
+                //Serial.println("UP1 - pushed");
                 digitalWrite(emulatedPushButton1, HIGH);
               }
 
               if(packets.data()[16] == 0){ // released
-              //  Serial.println("UP1 - released");
+                //Serial.println("UP1 - released");
                 digitalWrite(emulatedPushButton1, LOW);
               }
             }
@@ -628,7 +629,7 @@ void setup() { //§1
             }
 
             if(packets.data()[16] == 0){ // released
-             // Serial.println("DOWN1 - released");
+              //Serial.println("DOWN1 - released");
               digitalWrite(emulatedPushButton2, LOW);
             }
           }          
@@ -848,8 +849,8 @@ void loop()
   
   Voltage = map(Sample, 50, 3000, 1, 124);
   Voltage = Voltage/10;
-  Serial.print(Sample);
-  Serial.println(Voltage);
+  //Serial.print(Sample);
+  //Serial.println(Voltage);
 
   if (Voltage < 11.00) { //11.00V
   
