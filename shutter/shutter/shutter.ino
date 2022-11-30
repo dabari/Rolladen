@@ -81,7 +81,7 @@
 
               |----------------|
           GND o                |
-          +5V o                | (check if really 5V or 3.3V)
+        +3.3V o                | 
             S o                |
               |_ _ _ _ _ _ _ _ |     
 
