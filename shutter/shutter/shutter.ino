@@ -522,10 +522,10 @@ void setup() {
   digitalWrite(emulatedHallSignal, HIGH);
 
 
-  pinMode(emulatedPushButton1, OUTPUT);
-  pinMode(emulatedPushButton2, OUTPUT);
-  digitalWrite(emulatedPushButton1, LOW);
-  digitalWrite(emulatedPushButton2, LOW);
+  pinMode(emulatedPushButton1, INPUT);
+  pinMode(emulatedPushButton2, INPUT);
+  //digitalWrite(emulatedPushButton1, LOW);
+  //digitalWrite(emulatedPushButton2, LOW);
   
 
 

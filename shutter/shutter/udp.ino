@@ -22,11 +22,13 @@ void UDPhandling(){
       if (packets.data()[7] == pushup){ //push1 || push3
 
         if(packets.data()[16] == 63){ // pushed
+          pinMode(emulatedPushButton1, OUTPUT);
           digitalWrite(emulatedPushButton1, HIGH);
         }
 
         if(packets.data()[16] == 0){ // released
-          digitalWrite(emulatedPushButton1, LOW);
+          pinMode(emulatedPushButton1, INPUT);
+          //digitalWrite(emulatedPushButton1, LOW);
         }
       }
 
@@ -34,11 +36,13 @@ void UDPhandling(){
       if (packets.data()[7] == pushDown ){ //push2 || push4
 
         if(packets.data()[16] == 63){ // pushed
+          pinMode(emulatedPushButton2, OUTPUT);
           digitalWrite(emulatedPushButton2, HIGH);
         }
 
         if(packets.data()[16] == 0){ // released
-          digitalWrite(emulatedPushButton2, LOW);
+          pinMode(emulatedPushButton2, INPUT);
+          //digitalWrite(emulatedPushButton2, LOW);
         }
       }          
        
